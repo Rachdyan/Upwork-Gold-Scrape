@@ -1,0 +1,102 @@
+---
+title: "Combine Gold Price Data & News Headline"
+author: "Rachdyan"
+date: "2023-02-03"
+output: github_document
+always_allow_html: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+We want to combine the gold price data we have with news headline data that we scraped before.
+
+Load the needed libraries
+
+```{r libraries, echo = T, message = F, warning = F}
+library(dplyr)
+library(readxl)
+library(xlsx)
+library(lubridate)
+library(glue)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+```
+
+## Load the data
+
+Load the needed data
+
+```{r load-data, echo=T}
+
+# Load the gold prices data
+gold_prices <- read_xlsx("./data/Gold Prices.xltx")
+# Convert the date data to date format
+gold_prices$Date <- ymd(gold_prices$Date)
+
+# Load the news headline data
+news_data <- read_xlsx("./data/news_data.xlsx")
+news_data <- news_data[,-c(1,3)]
+news_data$time <- mdy(news_data$time)
+
+```
+## Combine the Data
+
+There are several steps to combine the data because of the complexity of the data format
+
+
+```{r combine_data, echo=T, cache=T}
+
+## Left join the gold prices data with the news headline data
+combined_data <- left_join(gold_prices, news_data, by = c("Date" = 'time'))
+
+## Create a count_headline column to count the number of headlines on that day, and count_index column to give index to the headlines
+combined_data <- combined_data %>% group_by(`S/No.`) %>% mutate(count_headline = sum(!is.na(headline)),
+                                                   headline_index = row_number()) %>% ungroup()
+
+## Make the headline_index value 0 for the date that doesn't have a headline
+combined_data[is.na(combined_data$headline), ]$headline_index <- 0
+
+## Create a headline_code column to give name to the column index
+combined_data <- combined_data %>% mutate(headline_code = glue("Headline {headline_index}"))
+
+## Remove unnecessary columns
+combined_data <- combined_data %>% select(-(4:6))
+
+## Convert the data to wide format
+combined_data <- combined_data %>% pivot_wider(names_from = headline_code, values_from = headline)
+
+## Fill the missing headline column by the previous value
+combined_data <- combined_data %>% group_by(Date) %>% fill(`Headline 1`, `Headline 2`, `Headline 3`, `Headline 4`, `Headline 5`, `Headline 6`)
+
+## Remove the uncomplete data on the same date
+combined_data <- combined_data %>% group_by(Date) %>% filter(count_headline == headline_index)
+
+## Tidy the data by removing unnecessary columns
+combined_data <- combined_data %>% select(-count_headline, -headline_index, -`Headline 0`) %>% ungroup()
+
+```
+
+Display the data
+
+```{r display_data, echo = T}
+
+combined_data %>% head() %>% kable() %>% kable_styling("striped") %>%
+  scroll_box(height = "500px")
+
+```
+
+## Export the Data
+
+Save the data into excel files
+
+```{r save_data, echo=TRUE}
+
+write.xlsx(combined_data, "./data/gold_prices_with_news.xlsx")
+
+```
+

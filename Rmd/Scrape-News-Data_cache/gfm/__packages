@@ -1,0 +1,10 @@
+rvest
+dplyr
+purrr
+glue
+lubridate
+readxl
+xlsx
+tidyr
+reactable
+knitr

@@ -1,0 +1,114 @@
+---
+title: "Scrape News Data"
+author: "Rachdyan"
+date: "2023-02-02"
+output: github_document
+always_allow_html: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+We want to merge the gold closing price data that we already have in "Gold Data.xltx" with the news headline from Reuters Gold Market Report (https://www.reuters.com/news/archive/goldMktRpt). The time period is from 1/1/2019 to 11/9/2022
+
+Load the needed libraries for the project
+
+```{r library, echo = T, message = F, warning = F}
+library(rvest)
+library(dplyr)
+library(purrr)
+library(glue)
+library(lubridate)
+library(xlsx)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+```
+
+
+
+## Scrape the Data
+
+The web link template is "https://www.reuters.com/news/archive/goldMktRpt?view=page&page={i}&pageSize=10" which {i} shows the current page. 
+
+Because the last price data we have from the "Gold Data.xltx" is until 1/1/2019, we only going to scrape the headline until that day which is in page 432.
+
+First, create functions to scrape the page
+
+
+```{r scrape_function, echo = T}
+
+get_news_info <- function(url){
+  page <- read_html(url)
+  
+  all_story <- page %>% html_nodes("article[class='story ']")
+  
+  headline <- map_chr(all_story, get_headline)
+  link <- map_chr(all_story, get_link)
+  time <- map_chr(all_story, get_time)
+  
+  result_df <- tibble(headline = headline, link = link, time = time)
+}
+
+
+get_headline <- function(story){
+  headline_raw <- story %>% html_node("h3[class='story-title']") %>% html_text2()
+  headline <- sub("PRECIOUS-", "", headline_raw) %>% tolower()
+}
+
+
+get_link <- function(story){
+  link_raw <- story %>% html_node("a") %>% html_attr("href")
+  link <- paste("https://www.reuters.com", link_raw, sep = "")
+}
+
+get_time <- function(story){
+  time <- story %>% html_node("span[class='timestamp']") %>% html_text2()
+}
+```
+
+Next, create the url for all the pages using a for loop
+
+```{r create_url, echo = T}
+
+all_url <- c()
+
+for (i in 1:432) {
+  url <- glue("https://www.reuters.com/news/archive/goldMktRpt?view=page&page={i}&pageSize=10")
+  all_url <- c(all_url, url)
+}
+
+```
+
+Scrape all the news headline data
+
+```{r scrape_data, cache=TRUE, echo = T}
+
+news_data <- map_dfr(all_url, get_news_info)
+
+## Remove Duplicate Data
+news_data <- news_data %>% distinct(headline, .keep_all = T)
+
+```
+
+Display the data
+```{r display_data, echo = T}
+
+news_data %>% head() %>% kable(format = "html") %>% kable_styling("striped") %>%
+  scroll_box(height = "300px")
+
+```
+
+
+## Export the Data
+
+Save the data into excel files
+
+```{r save_data, echo=TRUE}
+
+write.xlsx(news_data, "./data/news_data.xlsx")
+
+```

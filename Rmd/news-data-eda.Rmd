@@ -1,0 +1,107 @@
+---
+title: "news-data-eda"
+author: "Rachdyan"
+output: github_document
+always_allow_html: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+We want to create a wordcloud and a bar chart that shows the most frequent word in the news headline
+
+First, load the needed libraries
+
+```{r libraries, echo = T, message = F, warning = F}
+library(ggplot2)
+library(wordcloud)
+library(RColorBrewer)
+library(tm)
+library(xlsx)
+library(readxl)
+library(dplyr)
+library(tidyquant)
+```
+
+
+## Load The Data
+
+
+```{r load_data, echo=TRUE}
+# Load the data
+news_data <- read_xlsx("./data/news_data.xlsx")
+
+# Get the news headline
+headlines <- news_data$headline
+
+# Get a look of the data
+head(headlines)
+```
+
+## Prepare the Data
+
+Before creating the visualizations, we have to prepare the data
+
+```{r prepare_data, echo=T, warning = F}
+
+# Remove "gold" word from the headline daat
+headlines <- gsub("gold", "", headlines)
+
+# Make a Corpus
+headlines_docs <- Corpus(VectorSource(headlines))
+
+# Remove Number, Punctuation, Whitespace
+headlines_docs <- headlines_docs %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace)
+
+# Transform into lowercase
+headlines_docs <- tm_map(headlines_docs, content_transformer(tolower))
+
+# Remove stop words
+headlines_docs <- tm_map(headlines_docs, removeWords, stopwords("english"))
+
+# Create a Term document matrix
+dtm <- TermDocumentMatrix(headlines_docs) 
+matrix <- as.matrix(dtm) 
+words <- sort(rowSums(matrix),decreasing=TRUE) 
+
+# Create a data frame containing words and the frequency
+headlines_df <- data.frame(word = names(words),freq=words)
+
+# View the Data Frame
+head(headlines_df)
+```
+
+## Bar Chart
+
+Create a bar chart of top 15 words in the headlines
+
+```{r bar_chart, echo=T}
+
+headlines_df %>% top_n(15) %>% ggplot(aes(x = reorder(word, freq), y = freq, label = freq)) + 
+  geom_bar(stat = "identity", position = "dodge", fill = "#2C3E50") +  
+  geom_text(hjust = 1.2, color = "#F8F7F3", fontface = "bold") + 
+  labs(y="Frequency", 
+       x="",
+       title = "Most Frequent Word in the News Headline") +
+  coord_flip() + 
+  theme_tq()
+```
+
+The most frequent words used in the headlines are 'dollar', followed by 'fed', 'yields', 'gains', and 'data'
+
+## Word Cloud
+
+Create a wordcloud
+
+```{r word_cloud, echo=T}
+
+set.seed(1313)
+wordcloud(words = headlines_df$word, freq = headlines_df$freq, min.freq = 1, 
+          max.words=200, random.order=FALSE, 
+          rot.per=0.25, 
+          colors=brewer.pal(8, "Dark2"))
+```
